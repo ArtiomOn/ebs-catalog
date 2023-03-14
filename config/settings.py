@@ -1,15 +1,16 @@
 from datetime import timedelta
 from pathlib import Path
+from os import environ
 
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 
-config = dotenv_values(".env")
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config.get("SECRET_KEY")
+SECRET_KEY = environ.get("SECRET_KEY")
 
-DEBUG = config.get("DEBUG").lower() in ["true", "1"]
+DEBUG = environ.get("DEBUG").lower() in ["true", "1"]
 
 ALLOWED_HOSTS = ["*"]
 
@@ -30,6 +31,8 @@ INSTALLED_APPS = [
     "django_json_widget",
     "django_extensions",
     "django_filters",
+    "django_celery_beat",
+    "django_celery_results",
     # Project apps
     "apps.common",
     "apps.products",
@@ -101,11 +104,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql_psycopg2",
-        "NAME": config.get("NAME"),
-        "USER": config.get("USER"),
-        "PASSWORD": config.get("PASSWORD"),
-        "HOST": config.get("HOST"),
-        "PORT": config.get("PORT"),
+        "NAME": environ.get("POSTGRES_DB"),
+        "USER": environ.get("POSTGRES_USER"),
+        "PASSWORD": environ.get("POSTGRES_PASSWORD"),
+        "HOST": environ.get("POSTGRES_HOST"),
+        "PORT": environ.get("POSTGRES_PORT"),
     }
 }
 
@@ -178,3 +181,17 @@ if DEBUG:
     ]
 
     DEBUG_TOOLBAR_CONFIG = {"RENDER_PANELS": False}
+
+RABBITMQ_HOST = environ.get("RABBITMQ_HOST")
+RABBITMQ_PORT = environ.get("RABBITMQ_PORT")
+RABBITMQ_USER = environ.get("RABBITMQ_USER")
+RABBITMQ_PASS = environ.get("RABBITMQ_PASS")
+RABBITMQ_VHOST = environ.get("RABBITMQ_VHOST")
+
+CELERY_BROKER_URL = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}/{RABBITMQ_VHOST}"
+
+CELERY_RESULT_BACKEND = "django-db"
+
+CELERY_RESULT_EXTENDED = True
+
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
