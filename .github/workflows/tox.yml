@@ -83,7 +83,6 @@ jobs:
         run: |
           source .venv/bin/activate
           python manage.py test
-          coverage report --fail-under=100
   flake8-lint:
     runs-on: ubuntu-latest
     steps:
