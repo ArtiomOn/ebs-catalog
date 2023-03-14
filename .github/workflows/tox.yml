@@ -81,7 +81,7 @@ jobs:
       #----------------------------------------------
       - name: Run tests
         run: |
-          source .venv/bin/activate
+          source .venv/bin/activate &&
           python manage.py test
   flake8-lint:
     runs-on: ubuntu-latest
