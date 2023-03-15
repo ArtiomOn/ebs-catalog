@@ -13,11 +13,11 @@ on:
 env:
   SECRET_KEY: ${{ secrets.SECRET_KEY }}
   DEBUG: ${{ secrets.DEBUG }}
-  NAME: ${{ secrets.POSTGRES_DB }}
-  USER: ${{ secrets.POSTGRES_USER }}
-  PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-  HOST: ${{ secrets.POSTGRES_HOST }}
-  PORT: ${{ secrets.POSTGRES_PORT }}
+  POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+  POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+  POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+  POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+  POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
 
 concurrency:
   group: test
