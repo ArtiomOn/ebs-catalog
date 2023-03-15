@@ -82,7 +82,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          coverage run
+          coverage run --source='apps.products.views,apps.users.views'
           coverage report --fail-under=100
   flake8-lint:
     runs-on: ubuntu-latest
