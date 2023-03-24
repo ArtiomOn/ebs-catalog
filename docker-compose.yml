@@ -74,7 +74,7 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
-    command: celery -A config.celery:app worker -l INFO
+    command: celery -A config.celery:app worker --pool=eventlet --concurrency=10 -l INFO
     depends_on:
       - postgres
       - rabbitmq

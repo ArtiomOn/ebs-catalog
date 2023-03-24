@@ -1,125 +1,122 @@
 import json
-import pathlib
-import time
-from typing import Optional
+import os
+from datetime import datetime
+from random import randrange
+from time import sleep
 
 import requests
 from bs4 import BeautifulSoup
-from django.template.defaultfilters import slugify
-from fake_useragent import UserAgent
 from django.conf import settings
+from requests.exceptions import RequestException
+from selenium import webdriver
+from selenium.common import WebDriverException
+from selenium.webdriver import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
+from slugify import slugify
+
+from apps.common.helpers import headers, cookies, get_status, logging
+from apps.products.models import ShopProduct
+
+shop_title = 'enter'
+
+os.makedirs(f'{settings.ENTER_HTML}', exist_ok=True)
+os.makedirs(f'{settings.ENTER_ROOT}', exist_ok=True)
+
+webdriver_options = Options()
+webdriver_options.add_argument("--no-sandbox")
+webdriver_options.add_argument("--headless")
+webdriver_options.add_argument("--disable-gpu")
+webdriver_options.add_argument("--disable-dev-shm-usage")
+webdriver_options.add_argument("headless")
+
+caps = DesiredCapabilities.CHROME
+caps['goog:loggingPrefs'] = {'performance': 'ALL'}
+driver = webdriver.Chrome(chrome_options=webdriver_options, desired_capabilities=caps)
 
 
-class EnterParser:
-    user = UserAgent()
-    agent = user.random
+def parsing_enter_categories() -> None:
+    from apps.products.tasks import parse_enter_html
+    response = requests.get("https://enter.online/sitemap.xml", headers=headers, cookies=cookies, allow_redirects=False)
+    if not response.ok:
+        raise RequestException(f"Error: {response.status_code}")
 
-    headers = {
-        'User-Agent': agent,
-    }
+    xml = BeautifulSoup(response.text, 'xml')
 
-    def __init__(self) -> None:
-        self.table_goods = []
-        self.category_name = str
-        self.path = settings.ENTER_ROOT
-        pathlib.Path(self.path).mkdir(parents=True, exist_ok=True)
+    products_url = list(filter(None, xml.text.split('\n')))[7:]
 
-    @staticmethod
-    def logging(
-            message: str,
-            data: Optional[str] = None,
-            execution_time: Optional[float] = None
-    ) -> None:
-        print(f"{message} | Data: {data} | Time: {execution_time} sec.")
+    for product_url in products_url:
+        sleep(randrange(4, 7))
+        response = requests.get(product_url, headers=headers, cookies=cookies, allow_redirects=False)
+        if not response.status_code == 200:
+            continue
 
-    def get_categories(self) -> None:
-        start = time.process_time()
-        url = 'https://enter.online/'
+        xml = BeautifulSoup(response.text, 'xml')
+        objects = xml.find_all('url')
+        data_from_request = [url.loc.text for url in objects]
+        existing_data = ShopProduct.objects.filter(url__in=data_from_request).values('url', 'last_modify')
+        for obj in objects:
+            if obj.loc.text in [item['url'] for item in existing_data] and '/ru/' not in obj.loc.text:
+                permission = (
+                        datetime.fromisoformat(obj.lastmod.text) <=
+                        [item['last_modify'] for item in existing_data if item['url'] == obj.loc.text][0]
+                )
+                if not permission:
+                    parse_enter_html.apply_async(
+                        kwargs={
+                            "product_url": obj.loc.text,
+                            "last_modify": obj.lastmod.text
+                        }, countdown=5)
 
-        response = requests.get(url, headers=self.headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        categories = soup.select('.first-level > .first-level')
-        categories_data = {}
-        for category in categories:
-            category_name = category.select('a')[0].text.replace('\n', '')
-            subcategories = category.select(
-                '.uk-position-top-left > .uk-nav.tm-mobile-menu-nav > .blue'
+
+def parsing_html(product_url: str, last_modify: str) -> None:
+    retries = 0
+    while True:
+        try:
+            sleep(randrange(3, 6))
+            driver.get(product_url)
+            with open(f'{settings.ENTER_HTML}/{slugify(product_url)}.html', 'w+', encoding='utf-8') as file:
+                file.write(f'{driver.page_source} + <last_modify>{last_modify}</last_modify>')
+                logging(message=f"File: {product_url}.html - saved", data=product_url)
+            break
+        except WebDriverException:
+            retries += 1
+            logging(
+                message=f"Error: {WebDriverException}",
+                data=f"Product url:{product_url}",
+                retries=f"Retries: {retries}",
+                status_code=get_status(driver.get_log('performance'))
             )
-            categories_data[category_name] = {}
-            for subcategory in subcategories:
-                subcategory_link = subcategory.get('href')
+            sleep(randrange(3, 6))
 
-                # If category exists write
-                if subcategory_link:
-                    categories_data[category_name][slugify(subcategory.text)] = subcategory_link
-        with open(
-                f'{self.path}/enter_categories.json', 'w+', encoding='utf-8'
-        ) as read_file:
-            read_file.write(json.dumps(categories_data, indent=5, ensure_ascii=False))
-            self.logging(
-                message='File: enter_categories.json - saved',
-                execution_time=time.process_time() - start,
-            )
 
-    def get_products(self) -> None:
-        with open(f"{self.path}/enter_categories.json", "rb") as read_file:
-            shop_title = 'enter'
-            categories = json.load(read_file)
-        for category, category_data in categories.items():
+def parsing_goods() -> None:
+    for filename in os.listdir(f'{settings.ENTER_HTML}'):
+        with open(f'{settings.ENTER_HTML}/{filename}', encoding='utf-8') as fp:
+            data = {}
+            goods_data = BeautifulSoup(fp, 'html.parser')
 
-            for subcategory in category_data:
-                data = {}
+            subcategory = goods_data.select_one(".uk-breadcrumb > li:nth-child(2)").text.replace('\n', '')
+            data[subcategory] = []
+            lastmod = goods_data.select_one('last_modify').text
+            price = 0
+            if current_price := goods_data.select_one('.price-num > span'):
+                price = current_price.text
+            title = goods_data.select_one('.details-title').text
+            description = goods_data.select_one('h1 > span:nth-child(2)').text
+            url = goods_data.find('link', rel="canonical")['href']
+            label = slugify(f'{shop_title}, {title}, {description}, {price}, {lastmod}')
 
-                data[subcategory] = []
-                page = 1
-                while True:
-                    # Start timer
-                    start = time.process_time()
-                    link = category_data[subcategory]
-
-                    # Request method to goods
-                    response = requests.get(
-                        f'{link}?page={page}',
-                        headers=self.headers,
-                        allow_redirects=False,
-                    )
-
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    goods = soup.select('.product-card > div > .grid-item')
-
-                    if not bool(goods):
-                        break
-                        # Get goods values
-                    for good in goods:
-                        # noinspection PyUnusedLocal
-                        price = 0
-                        if price := good.select_one(
-                                '.grid-price-cart > .grid-price > .price'
-                        ):
-                            price = price.text
-                        elif discount_price := good.select_one(
-                                '.grid-price-cart > .grid-price > .price-new'
-                        ):
-                            price = discount_price.text
-                        title = good.select_one('div > a > .product-title').text
-                        description = good.select_one('div > a > .product-descr').text
-                        label = slugify(f'{shop_title}, {title}, {description}, {price}')
-
-                        # Save goods data in dict
-                        dictionary = {
-                            'label': label,
-                            'title': title,
-                            'description': description,
-                            'price': price,
-                            'available': bool(good.attrs.get('data-stock'))
-                        }
-                        data[subcategory].append(dictionary)
-                    self.logging(
-                        message=f'Added {subcategory}',
-                        data=f'Status code: {response.status_code} | Page: {page} | URL: {response.url}',
-                        execution_time=time.process_time() - start
-                    )
-                    page += 1
-
-                    with open(f'{self.path}/enter_items_{subcategory}.json', 'w+', encoding='utf-8') as file:
-                        file.write(json.dumps(data, indent=5, ensure_ascii=False))
+            dictionary = {
+                'label': label,
+                'title': title,
+                'description': description,
+                'price': price,
+                "lastmod": lastmod,
+                'url': url,
+                'available': not bool(goods_data.select_one('.uk-margin-small > p'))
+            }
+            data[subcategory].append(dictionary)
+            logging(message=f"Product: {title} - saved")
+        with open(f'{settings.ENTER_ROOT}/enter_items_{slugify(url)}.json', 'w+', encoding='utf-8') as file:
+            file.write(json.dumps(data, indent=5, ensure_ascii=False))
+            logging(message=f"File: enter_items_{label}.json - saved")

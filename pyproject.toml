@@ -37,6 +37,10 @@ vulture = "^2.6"
 gunicorn = "^20.1.0"
 django-celery-beat = "^2.4.0"
 django-celery-results = "^2.5.0"
+lxml = "^4.9.2"
+eventlet = "^0.33.3"
+selenium = "^4.8.2"
+django-rest-swagger = "^2.2.0"
 
 
 [build-system]

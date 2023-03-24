@@ -43,27 +43,13 @@ class InsertDataBase:
                         category_items = json.load(fp)
                     for item_name in category_items:
                         try:
-                            shop_queryset = Shop.objects.get(
-                                title=shop_name
-                            ).id
-                            data.append(
-                                ShopCategory(
-                                    name=item_name,
-                                    shop_id=shop_queryset
-                                ))
+                            shop_queryset = Shop.objects.get(title=shop_name).id
+                            data.append(ShopCategory(name=item_name, shop_id=shop_queryset))
                         except Shop.DoesNotExist:
                             raise ValueError('Shop not found')
-                    ShopCategory.objects.bulk_create(
-                        objs=data,
-                        ignore_conflicts=True
-                    )
-                    self.logging(
-                        message='Categories added',
-                        execution_time=time.process_time() - start
-                    )
-        self.logging(
-            message='Ended successfully'
-        )
+                    ShopCategory.objects.bulk_create(objs=data, ignore_conflicts=True)
+                    self.logging(message='Categories added', execution_time=time.process_time() - start)
+        self.logging(message='Ended successfully')
 
     def add_shop_products(self) -> None:
         for file in os.listdir(self.directory):
@@ -90,12 +76,9 @@ class InsertDataBase:
                                     description = category_data.get('description')
                                     title = category_data.get('title')
                                     available = category_data.get('available')
-                                    price = category_data.get('price')
-                                    if isinstance(price, str):
-                                        price = ''.join(price.split()[:-1])
-                                    if isinstance(price, type(None)):
-                                        price = 0
-                                    # noinspection PyArgumentList
+                                    last_modify = category_data.get('lastmod')
+                                    url = category_data.get('url')
+                                    price = float(''.join(str(category_data.get('price') or 0).split()))
                                     label = category_data.get('label')
                                     data_for_check[label] = {}
                                     data.append(
@@ -107,43 +90,36 @@ class InsertDataBase:
                                             available=available,
                                             shop_category_id=object_id,
                                             shop_id=shop_id,
+                                            url=url,
+                                            last_modify=last_modify,
                                             # category_id=category_id # Will be added in the future
                                         )
                                     )
-                                    label_data.append(
-                                        label
-                                    )
+                                    label_data.append(label)
                                     data_for_check[label] = {
-                                        'price': float(str(price)),
-                                        'available': available
+                                        'price': price,
+                                        'available': available,
+                                        'last_modify': last_modify
                                     }
                             self.auditlog(data_for_check, label_data)
-                            ShopProduct.objects.bulk_create(
-                                objs=data,
-                                ignore_conflicts=True
-                            )
-                            ShopProduct.objects.bulk_update(
-                                objs=data,
-                                fields=['available', 'price'],
-                            )
+                            ShopProduct.objects.bulk_create(objs=data, ignore_conflicts=True)
+                            ShopProduct.objects.bulk_update(objs=data, fields=['available', 'price', 'last_modify'])
                         self.logging(
                             message=f'Shop: {shop_name} - File: {filename} - added',
                             execution_time=time.process_time() - start
                         )
-        self.logging(
-            message='Ended successfully'
-        )
+        self.logging(message='Ended successfully')
 
     def auditlog(self, api_data: dict, label: list) -> None:
         # Get json data from DB
         queryset_dictionary_data = {}
-        queryset_data = list(
-            ShopProduct.objects.filter(
+        queryset_data = list(ShopProduct.objects.filter(
                 label__in=label
             ).values(
                 'label',
                 'price',
                 'available',
+                'last_modify'
             ))
         if queryset_data:
             for data in queryset_data:
@@ -151,18 +127,11 @@ class InsertDataBase:
                 for _ in data.values():
                     queryset_dictionary_data[data.get('label')] = {
                         'price': float(data.get('price')),
-                        'available': data.get('available')
+                        'available': data.get('available'),
+                        'last_modify': data.get('last_modify')
                     }
-
-            # Find difference
-            differ = list(
-                diff(
-                    queryset_dictionary_data,
-                    api_data
-                )
-            )
+            differ = list(diff(first=queryset_dictionary_data, second=api_data))
             if differ:
-                # noinspection SpellCheckingInspection
                 products_content = ContentType.objects.filter(
                     app_label='products',
                     model='shopproduct'
@@ -181,8 +150,6 @@ class InsertDataBase:
                         )
                         log.save()
 
-            self.logging(
-                message='Auditlog ended successfully'
-            )
+            self.logging(message='Auditlog ended successfully')
         else:
             self.logging('Auditlog skipped - new data')
