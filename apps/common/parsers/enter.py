@@ -8,6 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
 from requests.exceptions import RequestException
+from rest_framework.status import HTTP_200_OK
 from selenium import webdriver
 from selenium.common import WebDriverException
 from selenium.webdriver import DesiredCapabilities
@@ -42,12 +43,14 @@ def parsing_enter_categories() -> None:
 
     xml = BeautifulSoup(response.text, 'xml')
 
-    products_url = list(filter(None, xml.text.split('\n')))[7:]
+    products_url = list(filter(None, xml.text.split('\n')))
 
     for product_url in products_url:
+        if 'category' not in product_url:
+            continue
         sleep(randrange(4, 7))
         response = requests.get(product_url, headers=headers, cookies=cookies, allow_redirects=False)
-        if not response.status_code == 200:
+        if not response.status_code == HTTP_200_OK:
             continue
 
         xml = BeautifulSoup(response.text, 'xml')

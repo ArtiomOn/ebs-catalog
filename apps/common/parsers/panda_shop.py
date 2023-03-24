@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import datetime
 from random import randrange
@@ -11,15 +10,8 @@ from django.conf import settings
 from requests.exceptions import RequestException
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from slugify import slugify
 
-from apps.common.helpers import headers, cookies
-from apps.products.models import ShopProduct
-
-shop_title = 'enter'
-
-os.makedirs(f'{settings.ENTER_HTML}', exist_ok=True)
-os.makedirs(f'{settings.ENTER_ROOT}', exist_ok=True)
+shop_title = 'panda_shop'
 
 webdriver_options = Options()
 webdriver_options.add_argument("--no-sandbox")
