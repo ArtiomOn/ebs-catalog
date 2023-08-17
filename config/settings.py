@@ -143,6 +143,8 @@ MEDIA_ROOT = Path(BASE_DIR, "media/files/")
 ENTER_ROOT = Path(BASE_DIR, "media/enter/")
 ENTER_HTML = Path(BASE_DIR, "media/enter_html/")
 FOXMART_ROOT = Path(BASE_DIR, "media/foxmart/")
+PANDA_SHOP_ROOT = Path(BASE_DIR, "media/panda_shop/")
+PANDA_SHOP_HTML = Path(BASE_DIR, "media/panda_shop_html/")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

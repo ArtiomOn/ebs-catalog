@@ -18,8 +18,6 @@ from slugify import slugify
 from apps.common.helpers import headers, cookies, get_status, logging
 from apps.products.models import ShopProduct
 
-shop_title = 'enter'
-
 os.makedirs(f'{settings.ENTER_HTML}', exist_ok=True)
 os.makedirs(f'{settings.ENTER_ROOT}', exist_ok=True)
 
@@ -43,7 +41,7 @@ def parsing_enter_categories() -> None:
 
     xml = BeautifulSoup(response.text, 'xml')
 
-    products_url = list(filter(None, xml.text.split('\n')))
+    products_url = list(filter(None, xml.text.split('\n')))[10:11]
 
     for product_url in products_url:
         if 'category' not in product_url:
@@ -58,17 +56,20 @@ def parsing_enter_categories() -> None:
         data_from_request = [url.loc.text for url in objects]
         existing_data = ShopProduct.objects.filter(url__in=data_from_request).values('url', 'last_modify')
         for obj in objects:
-            if obj.loc.text in [item['url'] for item in existing_data] and '/ru/' not in obj.loc.text:
-                permission = (
-                        datetime.fromisoformat(obj.lastmod.text) <=
-                        [item['last_modify'] for item in existing_data if item['url'] == obj.loc.text][0]
-                )
-                if not permission:
-                    parse_enter_html.apply_async(
-                        kwargs={
-                            "product_url": obj.loc.text,
-                            "last_modify": obj.lastmod.text
-                        }, countdown=5)
+            if '/ru/' not in obj.loc.text:
+                if obj.loc.text in [item['url'] for item in existing_data]:
+                    permission = (
+                            datetime.fromisoformat(obj.lastmod.text) <=
+                            [item['last_modify'] for item in existing_data if item['url'] == obj.loc.text][0]
+                    )
+                    if permission:
+                        continue
+                parse_enter_html.apply_async(
+                    kwargs={
+                        "product_url": obj.loc.text,
+                        "last_modify": obj.lastmod.text
+                    }, countdown=5)
+        logging(message='Ended successfully')
 
 
 def parsing_html(product_url: str, last_modify: str) -> None:
@@ -107,7 +108,7 @@ def parsing_goods() -> None:
             title = goods_data.select_one('.details-title').text
             description = goods_data.select_one('h1 > span:nth-child(2)').text
             url = goods_data.find('link', rel="canonical")['href']
-            label = slugify(f'{shop_title}, {title}, {description}, {price}, {lastmod}')
+            label = slugify(f'enter, {title}, {description}, {price}, {lastmod}')
 
             dictionary = {
                 'label': label,
